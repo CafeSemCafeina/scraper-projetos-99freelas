@@ -11,7 +11,6 @@ PARAMS = {
     "categoria": "web-mobile-e-software",
     "data-da-publicacao": "menos-de-3-dias-atras"
 }
-NUM_PAGINAS_PARA_VARREDURA = 3
 PASTA_VARREDURAS = Path("varreduras")
 
 # --- Funções ---
@@ -205,8 +204,20 @@ if __name__ == "__main__":
     todos_os_projetos = []
     print("Iniciando varredura de projetos no 99Freelas...")
 
-    # Itera pelas páginas definidas
-    for i in range(1, NUM_PAGINAS_PARA_VARREDURA + 1):
+    # --- NOVO: Solicita o número de páginas ao usuário ---
+    num_paginas_para_varredura = 0
+    while num_paginas_para_varredura <= 0:
+        try:
+            entrada_usuario = input("Quantas páginas de resultados você deseja varrer? Digite um número inteiro maior que 0: ")
+            num_paginas_para_varredura = int(entrada_usuario)
+            if num_paginas_para_varredura <= 0:
+                print("Por favor, digite um número maior que zero.")
+        except ValueError:
+            print("Entrada inválida. Por favor, digite um número inteiro.")
+    # --- FIM NOVO ---
+
+    # Itera pelas páginas definidas pelo usuário
+    for i in range(1, num_paginas_para_varredura + 1): # Usa a variável com o input do usuário
         soup_pagina = buscar_html_pagina(i)
         if soup_pagina:
             print(f"Analisando dados da página {i}...")
