@@ -46,7 +46,8 @@ def buscar_html_pagina(page_num):
 
 def extrair_dados_projetos(soup):
     """
-    Extrai os detalhes dos projetos a partir de um objeto BeautifulSoup.
+    Extrai os detalhes dos projetos a partir de um objeto BeautifulSoup,
+    usando seletores CSS específicos fornecidos pelo usuário.
 
     Args:
         soup (BeautifulSoup object): O objeto BeautifulSoup com o HTML da página.
@@ -56,18 +57,20 @@ def extrair_dados_projetos(soup):
               os detalhes de um projeto ('titulo', 'link', 'info', 'descricao').
     """
     projetos_encontrados = []
-    # Encontra a lista principal que contém os projetos
+    # Encontra a lista principal que contém os projetos (mantendo o seletor original,
+    # pois 'result-list' geralmente é suficiente e único)
     lista_resultados = soup.find('ul', class_='result-list')
 
     if not lista_resultados:
         print("A lista de resultados (<ul class='result-list'>) não foi encontrada.")
         return projetos_encontrados
 
-    # Encontra todos os itens <li> dentro da lista
-    itens_projeto = lista_resultados.find_all('li', id=lambda x: x and x.startswith('project-'))
+    # Encontra todos os itens <li> dentro da lista usando a classe 'result-item'
+    # que parece ser comum a todos os itens de projeto.
+    itens_projeto = lista_resultados.find_all('li', class_='result-item')
 
     if not itens_projeto:
-        print("Nenhum item de projeto (<li>) foi encontrado na lista.")
+        print("Nenhum item de projeto (<li class='result-item'>) foi encontrado na lista.")
         return projetos_encontrados
 
     print(f"Encontrados {len(itens_projeto)} itens de projeto na página.")
@@ -78,41 +81,62 @@ def extrair_dados_projetos(soup):
         info = "Não encontrada"
         descricao = "Não encontrada"
 
-        # Extrai o título e o link
-        h1_title = item.find('h1', class_='title')
-        if h1_title:
-            link_tag = h1_title.find('a', href=True)
-            if link_tag:
-                titulo = link_tag.get_text(strip=True)
-                # Garante que o link seja absoluto
-                link_parcial = link_tag['href']
-                if link_parcial.startswith('/'):
-                    link = f"https://www.99freelas.com.br{link_parcial}"
-                else:
-                    link = link_parcial # Assume que já é absoluto se não começar com /
+        # --- Extrai o título e o link ---
+        # Procura pelo <hgroup> primeiro
+        hgroup_tag = item.find('hgroup')
+        if hgroup_tag:
+            # Dentro do <hgroup>, procura por <h1 class="title">
+            h1_title = hgroup_tag.find('h1', class_='title')
+            if h1_title:
+                # Dentro do <h1>, procura pela tag <a> com href
+                link_tag = h1_title.find('a', href=True)
+                if link_tag:
+                    # Extrai o texto do link (título) e o atributo href (link)
+                    titulo = link_tag.get_text(strip=True)
+                    link_parcial = link_tag['href']
+                    # Garante que o link seja absoluto
+                    if link_parcial.startswith('/'):
+                        link = f"https://www.99freelas.com.br{link_parcial}"
+                    else:
+                        link = link_parcial # Assume que já é absoluto se não começar com /
 
-        # Extrai as informações (ajustando seletores conforme necessidade)
-        # Tentativa 1: Classe exata fornecida pelo usuário (pode precisar de ajuste)
-        info_tag = item.find('p', class_='item-text information') # Ajustado de 'item-texta'
+        # --- Extrai as informações ---
+        # Procura diretamente por <p class="item-text information"> dentro do <li>
+        info_tag = item.find('p', class_='item-text information')
         if info_tag:
+            # Extrai todo o texto, usando ' | ' como separador se houver tags internas
             info = info_tag.get_text(separator=' | ', strip=True)
-        else:
-            # Tentativa 2: Buscar uma tag <p> com a classe 'information' (mais genérico)
-            info_tag_alt = item.find('p', class_='information')
-            if info_tag_alt:
-                 info = info_tag_alt.get_text(separator=' | ', strip=True)
+
+        # --- Extrai a descrição ---
+        # Procura pela <div class="item-text description formatted-text">
+        desc_div_tag = item.find('div', class_='item-text description formatted-text')
+        if desc_div_tag:
+            # Pega o texto principal da div, ignorando o span.details por enquanto
+            # Usamos find(text=True, recursive=False) para pegar apenas o texto direto da div
+            # ou get_text com um separador para tentar juntar pedaços.
+            # Vamos tentar com get_text primeiro, limpando espaços extras.
+            descricao_parts = [text for text in desc_div_tag.stripped_strings if text] # Pega todos os textos não vazios
+
+            # Procura pelo <span class="details"> DENTRO da div de descrição
+            span_details = desc_div_tag.find('span', class_='details')
+            if span_details:
+                # Se o span existir, remove o texto dele da lista inicial (se estiver lá)
+                # e adiciona o texto do span no final.
+                texto_span = span_details.get_text(strip=True)
+                # Remove o texto do span da lista principal para evitar duplicação
+                descricao_parts = [part for part in descricao_parts if part != texto_span]
+                # Junta as partes iniciais e adiciona o texto do span
+                descricao = ' '.join(descricao_parts) + ' ' + texto_span
+                descricao = descricao.strip() # Limpa espaços no início/fim
             else:
-                # Se ainda não encontrar, pode ser necessário inspecionar o HTML real
-                # para achar o seletor correto para as informações.
-                pass # Mantém "Não encontrada"
+                # Se não houver span.details, apenas junta as partes encontradas na div
+                descricao = ' '.join(descricao_parts)
 
-        # Extrai a descrição
-        desc_tag = item.find('div', class_='description') # Simplificado, a classe 'formatted-text' pode estar dentro
-        if desc_tag:
-            # Pega todo o texto dentro da div, incluindo tags aninhadas, e limpa espaços
-            descricao = desc_tag.get_text(strip=True)
-            # Alternativa: Se precisar do HTML interno: descricao = str(desc_tag)
+            # Garante que não fique vazio se não encontrar texto
+            if not descricao:
+                descricao = "Descrição encontrada, mas texto vazio."
 
+        # Adiciona o projeto encontrado (ou os valores padrão "Não encontrado") à lista
         projetos_encontrados.append({
             'titulo': titulo,
             'link': link,
