@@ -104,8 +104,11 @@ def extrair_dados_projetos(soup):
         # Procura diretamente por <p class="item-text information"> dentro do <li>
         info_tag = item.find('p', class_='item-text information')
         if info_tag:
-            # Extrai todo o texto, usando ' | ' como separador se houver tags internas
-            info = info_tag.get_text(separator=' | ', strip=True)
+            # Extrai strings limpas, filtra os separadores '|' e junta com nova linha
+            info_parts = [text for text in info_tag.stripped_strings if text != '|']
+            info = '\n'.join(info_parts) # Junta cada informação em uma nova linha
+            if not info: # Garante que não fique vazio se não encontrar texto útil
+                info = "Não encontrada"
 
         # --- Extrai a descrição ---
         # Procura pela <div class="item-text description formatted-text">
